@@ -7,6 +7,7 @@ behave identically.
 from __future__ import annotations
 
 import math
+import os
 
 import bpy
 from bpy.props import (BoolProperty, EnumProperty, FloatProperty, IntProperty,
@@ -110,6 +111,10 @@ class MODELRAIL_PG_settings(PropertyGroup):
     cap_ends: BoolProperty(name="Cap Ends", default=True,
                            description="Close the rail ends (required for a printable solid)")
 
+    # ----------------------------------------------------------- status
+    last_report: StringProperty(name="Last Result", default="",
+                                description="Result of the last Generate / Update / Export")
+
     # ----------------------------------------------------------- export
     export_format: EnumProperty(name="Format", items=[
         ("STL", "STL (binary)", "Best for 3D printing"),
@@ -156,21 +161,41 @@ def _check_profile(op, s):
 
 
 # ================================================================ operators
+_busy = False
+
+
+def is_busy() -> bool:
+    """True while a rail is being generated (the panel shows a wait message)."""
+    return _busy
+
+
+def _redraw(context):
+    screen = context.screen
+    if screen:
+        for area in screen.areas:
+            area.tag_redraw()
+
+
 class MODELRAIL_OT_generate(Operator):
+    """Create a rail object at the 3D cursor from the current profile and shape"""
+
     bl_idname = "model_rail.generate"
     bl_label = "Generate Rail"
-    bl_description = "Create a rail object from the current profile and shape"
     bl_options = {'REGISTER', 'UNDO'}
 
-    def execute(self, context):
+    _timer = None
+
+    def _run(self, context):
         s = _settings(context)
         p = _check_profile(self, s)
         if p is None:
+            s.last_report = "Invalid profile - see the Profile panel"
             return {'CANCELLED'}
         try:
             if s.path_mode == "CURVE_OBJECT":
                 if not s.curve_object:
                     self.report({'ERROR'}, "Pick a curve object")
+                    s.last_report = "Pick a curve object in the Shape panel"
                     return {'CANCELLED'}
                 obj = api.create_rail_along_curve(s.curve_object, p,
                                                   lateral_offset=s.to_mm(s.lateral_offset),
@@ -182,13 +207,52 @@ class MODELRAIL_OT_generate(Operator):
                                              cant_deg=s.cant, cap_ends=s.cap_ends)
         except (ValueError, TypeError) as ex:
             self.report({'ERROR'}, str(ex))
+            s.last_report = str(ex).splitlines()[0]
             return {'CANCELLED'}
         for o in context.selected_objects:
             o.select_set(False)
         obj.select_set(True)
         context.view_layer.objects.active = obj
-        self.report({'INFO'}, f"Created '{obj.name}' ({len(obj.data.polygons)} faces)")
+        s.last_report = f"Created '{obj.name}' ({len(obj.data.polygons)} faces)"
+        self.report({'INFO'}, s.last_report)
         return {'FINISHED'}
+
+    def execute(self, context):
+        # Scripts and the redo panel: build straight away.
+        return self._run(context)
+
+    def invoke(self, context, event):
+        """Show the wait message and busy cursor first, then build on the next timer tick.
+
+        Blender doesn't redraw while an operator runs, so the build waits one
+        tick to let the panel show "please wait".
+        """
+        global _busy
+        if _busy:
+            return {'CANCELLED'}
+        _busy = True
+        wm = context.window_manager
+        context.window.cursor_modal_set('WAIT')
+        if context.workspace:
+            context.workspace.status_text_set("Generating rail, please wait...")
+        _redraw(context)
+        self._timer = wm.event_timer_add(0.1, window=context.window)
+        wm.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        global _busy
+        if event.type != 'TIMER':
+            return {'RUNNING_MODAL'}  # ignore clicks and keys until the build is done
+        context.window_manager.event_timer_remove(self._timer)
+        try:
+            return self._run(context)
+        finally:
+            context.window.cursor_modal_restore()
+            if context.workspace:
+                context.workspace.status_text_set(None)
+            _busy = False
+            _redraw(context)
 
 
 class MODELRAIL_OT_rebuild(Operator):
@@ -217,7 +281,8 @@ class MODELRAIL_OT_rebuild(Operator):
                                     lateral_offset=s.to_mm(s.lateral_offset),
                                     cant_deg=s.cant, cap_ends=s.cap_ends)
             n += 1
-        self.report({'INFO'}, f"Updated {n} rail(s)")
+        s.last_report = f"Updated {n} rail(s)"
+        self.report({'INFO'}, s.last_report)
         return {'FINISHED'}
 
 
@@ -334,48 +399,103 @@ class MODELRAIL_OT_export(Operator):
             self.report({'ERROR'}, f"Export failed: {ex}")
             return {'CANCELLED'}
         s.export_format = self.format
+        s.last_report = f"Exported {what} to {os.path.basename(path)}"
         self.report({'INFO'}, f"Exported {what} to {path}")
         return {'FINISHED'}
 
 
-# =================================================================== panel
-class MODELRAIL_PT_main(Panel):
-    bl_label = "Model Rail"
-    bl_idname = "MODELRAIL_PT_main"
+# =================================================================== panels
+class _Panel:
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Rail"
 
+
+class MODELRAIL_PT_main(_Panel, Panel):
+    """Top of the Rail tab: Generate, Update, Export and the last result."""
+
+    bl_label = "Model Rail"
+    bl_idname = "MODELRAIL_PT_main"
+
     def draw(self, context):
         s = _settings(context)
-        L = self.layout
+        col = self.layout.column()
+        p = s.to_profile()
+        errs = p.validate()
 
-        box = L.box()
-        box.label(text="Profile", icon='MOD_SOLIDIFY')
-        row = box.row(align=True)
+        row = col.row(align=True)
+        row.scale_y = 1.4
+        if is_busy():
+            row.alert = True
+            row.label(text="Generating rail, please wait...", icon='SORTTIME')
+        else:
+            row.enabled = not errs
+            row.operator(MODELRAIL_OT_generate.bl_idname, icon='ADD')
+        col.operator(MODELRAIL_OT_rebuild.bl_idname, icon='FILE_REFRESH')
+
+        row = col.row(align=True)
+        row.operator(MODELRAIL_OT_export.bl_idname, icon='EXPORT')
+        row.prop(s, "export_format", text="")
+
+        if errs:
+            box = col.box()
+            box.alert = True
+            box.label(text="Fix the profile to generate:", icon='ERROR')
+            for e in errs[:3]:
+                box.label(text=e)
+        elif s.last_report:
+            col.label(text=s.last_report, icon='INFO')
+
+        box = col.box()
+        name = p.name if p.name.lower().startswith("code") else f"{p.name} (code {p.code:g})"
+        box.label(text=f"{name}, {p.height:.3f} mm high", icon='MOD_SOLIDIFY')
+        if s.path_mode == "STRAIGHT":
+            box.label(text=f"Straight, {s.to_mm(s.length):.1f} mm long")
+        elif s.path_mode == "ARC":
+            arc = math.radians(s.angle) * s.to_mm(s.radius)
+            box.label(text=f"{s.direction.title()} curve, R {s.to_mm(s.radius):.1f} mm, "
+                           f"{s.angle:g}° ({arc:.1f} mm)")
+        else:
+            box.label(text=f"Along {s.curve_object.name}" if s.curve_object
+                      else "Along curve: none picked")
+
+
+class MODELRAIL_PT_profile(_Panel, Panel):
+    bl_label = "Rail Profile"
+    bl_parent_id = "MODELRAIL_PT_main"
+
+    def draw(self, context):
+        s = _settings(context)
+        col = self.layout.column()
+        row = col.row(align=True)
         row.prop(s, "preset", text="")
         row.operator(MODELRAIL_OT_delete_preset.bl_idname, text="", icon='TRASH')
         p = s.to_profile()
-        box.label(text=f"Code {p.code:g}   ({p.height:.3f} mm / {p.height / INCH:.4f} in)")
-        col = box.column(align=True)
+        col.label(text=f"Code {p.code:g}   ({p.height:.3f} mm / {p.height / INCH:.4f} in)")
+        sub = col.column(align=True)
         for f in PROFILE_FIELDS:
-            col.prop(s, f)
-        col.prop(s, "corner_segments")
-        errs = p.validate()
-        for e in errs[:3]:
-            box.label(text=e, icon='ERROR')
+            sub.prop(s, f)
+        sub.prop(s, "corner_segments")
+        for e in p.validate()[:3]:
+            col.label(text=e, icon='ERROR')
 
-        row = box.row(align=True)
+        row = col.row(align=True)
         row.prop(s, "code_input")
         row.operator(MODELRAIL_OT_from_code.bl_idname, text="Fill From Code")
 
-        sub = box.column(align=True)
+        sub = col.column(align=True)
         sub.prop(s, "preset_name")
         sub.prop(s, "description", text="Notes")
         sub.operator(MODELRAIL_OT_save_preset.bl_idname, icon='FILE_TICK')
 
-        box = L.box()
-        box.label(text="Shape", icon='CURVE_PATH')
+
+class MODELRAIL_PT_shape(_Panel, Panel):
+    bl_label = "Shape"
+    bl_parent_id = "MODELRAIL_PT_main"
+
+    def draw(self, context):
+        s = _settings(context)
+        box = self.layout.column()
         box.row().prop(s, "path_mode", expand=True)
         col = box.column(align=True)
         if s.path_mode != "CURVE_OBJECT":
@@ -397,16 +517,6 @@ class MODELRAIL_PT_main(Panel):
         col.prop(s, "cant", text="Cant (°)")
         col.prop(s, "cap_ends")
 
-        col = L.column(align=True)
-        col.scale_y = 1.4
-        col.operator(MODELRAIL_OT_generate.bl_idname, icon='ADD')
-        L.operator(MODELRAIL_OT_rebuild.bl_idname, icon='FILE_REFRESH')
-
-        box = L.box()
-        box.label(text="Export (mm)", icon='EXPORT')
-        box.prop(s, "export_format", text="")
-        box.operator(MODELRAIL_OT_export.bl_idname, icon='EXPORT')
-
 
 classes = (
     MODELRAIL_PG_settings,
@@ -417,6 +527,8 @@ classes = (
     MODELRAIL_OT_delete_preset,
     MODELRAIL_OT_export,
     MODELRAIL_PT_main,
+    MODELRAIL_PT_profile,
+    MODELRAIL_PT_shape,
 )
 
 

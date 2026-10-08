@@ -1,7 +1,7 @@
-schema_version = "1.0.0"
+schema_version = "1.1.0"
 
 id = "model_rail_generator"
-version = "1.0.0"
+version = "1.1.0"
 name = "Model Rail Generator"
 tagline = "Generate and export straight or curved model railroad rail"
 maintainer = "John <john@singerlinks.com>"

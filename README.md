@@ -20,20 +20,29 @@ The panel appears in the 3D Viewport sidebar (N) under the **Rail** tab.
 
 ## Using the panel
 
-1. **Profile** – choose a preset, or edit any dimension. All dimensions are millimetres at
-   actual model size. The panel shows the resulting rail code. *Fill From Code* fills every
-   dimension with typical proportions for any code you type (e.g. 65).
-2. **Save Preset** – enter a name and click *Save Preset*. Built-in presets are read-only, so
-   give your measured rail a new name (e.g. "Peco Code 75 measured"). User presets are stored
-   in `<Blender config>/model_rail_generator/rail_presets.json` and survive add-on updates.
-3. **Shape** – *Straight* (length), *Curved* (radius to rail centreline, angle, left/right), or
-   *Along Curve* (any curve object; raise its resolution for smoother rail). Length/radius/offset
-   can be entered in mm or inches. *Offset* shifts the rail sideways, *Cant* tilts it.
-4. **Generate Rail** creates the object at the 3D cursor. *Update Selected Rails* regenerates
-   selected rails with the current settings (materials, transform and modifiers are kept).
-5. **Export** writes selected objects (merged, transforms and modifiers applied) to binary STL,
-   ASCII STL or OBJ in millimetres. With nothing selected it exports a rail built from the
-   current settings.
+The **Rail** tab has the actions at the top and the settings in two sub-panels below:
+
+* **Generate Rail** creates the rail at the 3D cursor. While it builds, the panel and the status
+  bar show "Generating rail, please wait...", the mouse shows the wait cursor, and clicks and
+  keys are ignored until it finishes. The result (or any error) is shown under the buttons.
+* **Update Selected Rails** regenerates the selected rails with the current settings
+  (materials, transform and modifiers are kept).
+* **Export Rail** with the format menu next to it writes selected objects (merged, transforms
+  and modifiers applied) to binary STL, ASCII STL or OBJ in millimetres. With nothing selected
+  it exports a rail built from the current settings.
+* A summary box shows the current profile and shape at a glance.
+
+**Rail Profile** sub-panel – choose a preset or edit any dimension (millimetres at actual model
+size); the rail code is shown. *Fill From Code* fills every dimension with typical proportions
+for any code you type (e.g. 65). To save a preset, enter a name and click *Save Preset*.
+Built-in presets are read-only, so give your measured rail a new name (e.g. "Peco Code 75
+measured"). User presets are stored in
+`<Blender config>/model_rail_generator/rail_presets.json` and survive add-on updates.
+
+**Shape** sub-panel – *Straight* (length), *Curved* (radius to rail centreline, angle,
+left/right) or *Along Curve* (any curve object; raise its resolution for smoother rail).
+Length/radius/offset can be entered in mm or inches. *Offset* shifts the rail sideways,
+*Cant* tilts it.
 
 ## Built-in presets
 
@@ -147,7 +156,8 @@ RAIL/
 ├── model_rail_generator/   the add-on package (this folder is what goes in the zip)
 ├── tests/
 │   ├── test_core.py        geometry, presets, export — plain Python, no Blender needed
-│   └── test_blender.py     UI operators + API inside Blender
+│   ├── test_blender.py     UI operators + API inside Blender
+│   └── test_ui_flow.py     Generate click flow (wait cursor) and panel layout
 ├── build.py                makes dist/model_rail_generator-<version>.zip
 ├── dist/                   installable add-on zip(s)
 └── README.md
@@ -157,6 +167,7 @@ Run the tests from the repository folder:
 
 ```
 python tests/test_core.py
+python tests/test_ui_flow.py      (needs pip install bpy)
 "C:\Program Files\Blender Foundation\Blender 4.2\blender.exe" -b --factory-startup --python tests/test_blender.py
 ```
 

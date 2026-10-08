@@ -11,7 +11,7 @@ Other add-ons: use the public API in ``api`` (also importable as
 bl_info = {
     "name": "Model Rail Generator",
     "author": "John (singerlinks.com)",
-    "version": (1, 0, 0),
+    "version": (1, 1, 0),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > Rail",
     "description": "Generate and export straight or curved model railroad rail (code 40-332)",
