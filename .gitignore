@@ -4,9 +4,7 @@ __pycache__/
 .venv/
 venv/
 
-# Build output
-dist/
-*.zip
+# Build output (dist/*.zip is committed so the installable add-on is in the repo)
 
 # Test / export output
 *.stl

@@ -10,7 +10,7 @@ Tested with Blender 5.2 (headless); targets Blender 3.6 and later.
 
 ## Install
 
-Build the zip with `python build.py` (creates `dist/model_rail_generator-<version>.zip`), then:
+The ready-to-install zip is in `dist/` (rebuild it with `python build.py` after changing the code), then:
 
 * **Blender 4.2+**: Edit > Preferences > Get Extensions > ▾ menu > *Install from Disk…* and pick
   the zip.
@@ -149,6 +149,7 @@ RAIL/
 │   ├── test_core.py        geometry, presets, export — plain Python, no Blender needed
 │   └── test_blender.py     UI operators + API inside Blender
 ├── build.py                makes dist/model_rail_generator-<version>.zip
+├── dist/                   installable add-on zip(s)
 └── README.md
 ```
 

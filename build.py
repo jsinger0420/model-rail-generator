@@ -3,7 +3,7 @@
 Works for Blender 4.2+ (Install from Disk) and 3.6-4.1 (Add-ons > Install).
 """
 import os
-import tomllib
+import re
 import zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -11,8 +11,8 @@ PKG = "model_rail_generator"
 
 
 def main():
-    with open(os.path.join(ROOT, PKG, "blender_manifest.toml"), "rb") as fh:
-        version = tomllib.load(fh)["version"]
+    with open(os.path.join(ROOT, PKG, "blender_manifest.toml"), encoding="utf-8") as fh:
+        version = re.search(r'^version\s*=\s*"([^"]+)"', fh.read(), re.M).group(1)
     os.makedirs(os.path.join(ROOT, "dist"), exist_ok=True)
     out = os.path.join(ROOT, "dist", f"{PKG}-{version}.zip")
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
