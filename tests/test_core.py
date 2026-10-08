@@ -1,3 +1,8 @@
+"""Test profiles, presets, geometry and export without Blender.
+
+Run: python tests/test_core.py
+"""
+
 import math, os, sys, tempfile, struct
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from model_rail_generator import api
@@ -5,6 +10,7 @@ from model_rail_generator.geometry import triangulate_polygon
 from model_rail_generator.profile import polygon_area
 
 def check(md, label):
+    """Assert ``md`` is a closed solid with outward-facing normals."""
     assert md.is_manifold(), label + " not manifold"
     assert md.volume() > 0, label + " inverted"
 

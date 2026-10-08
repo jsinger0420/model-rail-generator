@@ -67,6 +67,7 @@ _preset_file_override: str | None = None
 
 
 def _default_preset_file() -> str:
+    """Path of the user preset file: $MODEL_RAIL_PRESETS, Blender's config folder, or ~/.model_rail_generator."""
     env = os.environ.get("MODEL_RAIL_PRESETS")
     if env:
         return env
@@ -79,6 +80,7 @@ def _default_preset_file() -> str:
 
 
 def _lib() -> PresetLibrary:
+    """The shared PresetLibrary, created on first use."""
     global _library
     if _library is None:
         _library = PresetLibrary(_preset_file_override or _default_preset_file())
@@ -103,14 +105,17 @@ def list_presets() -> list[str]:
 
 
 def list_builtin_presets() -> list[str]:
+    """Names of the built-in presets, largest rail first."""
     return _lib().builtin_names()
 
 
 def list_user_presets() -> list[str]:
+    """Names of the user's saved presets, sorted alphabetically."""
     return _lib().user_names()
 
 
 def is_builtin_preset(name: str) -> bool:
+    """True if ``name`` is a built-in (read-only) preset."""
     return name in BUILTIN_PRESETS
 
 
@@ -130,10 +135,12 @@ def delete_preset(name: str) -> None:
 
 
 def import_presets(path: str, overwrite: bool = True) -> list[str]:
+    """Merge presets from a JSON file into the user presets; returns the names imported."""
     return _lib().import_json(path, overwrite)
 
 
 def export_presets(path: str, names: list[str] | None = None) -> None:
+    """Write user presets (or just ``names``) to a JSON file for sharing."""
     _lib().export_json(path, names)
 
 
@@ -195,8 +202,11 @@ def generate_rail_mesh(profile, path, lateral_offset: float = 0.0,
 
 # ========================================================= blender helpers
 def mm_to_blender_units(scene=None) -> float:
-    """Factor converting mm to Blender units for ``scene`` (default: current).
-    1 BU = 1 m at Unit Scale 1.0, so the default factor is 0.001."""
+    """Factor that converts millimetres to Blender units for ``scene``.
+
+    Uses the current scene when ``scene`` is None. 1 BU = 1 m at Unit Scale
+    1.0, so the default factor is 0.001.
+    """
     import bpy
     scene = scene or bpy.context.scene
     scale = scene.unit_settings.scale_length if scene else 1.0
@@ -204,6 +214,7 @@ def mm_to_blender_units(scene=None) -> float:
 
 
 def _store_params(obj, profile: RailProfile, path_spec, lateral_offset, cant_deg, cap_ends):
+    """Save the generation parameters on ``obj`` so it can be rebuilt or inspected later."""
     obj[RAIL_PROP_KEY] = json.dumps({
         "api_version": list(API_VERSION),
         "profile": profile.to_dict(),
@@ -216,6 +227,7 @@ def _store_params(obj, profile: RailProfile, path_spec, lateral_offset, cant_deg
 
 
 def _mesh_from_data(name: str, md: MeshData, factor: float):
+    """Create a Blender mesh named ``name`` from mm MeshData, scaled by ``factor``."""
     import bpy
     me = bpy.data.meshes.new(name)
     me.from_pydata([(x * factor, y * factor, z * factor) for x, y, z in md.vertices],
@@ -226,6 +238,7 @@ def _mesh_from_data(name: str, md: MeshData, factor: float):
 
 
 def _path_spec_for_storage(path):
+    """Turn a path spec or RailPath into a JSON-safe dict for storing on an object."""
     if isinstance(path, dict):
         return dict(path)
     return {"kind": "POLYLINE", "points": [list(p.position) for p in path.points],
@@ -236,9 +249,12 @@ def create_rail_object(profile, path, name: str | None = None, collection=None,
                        location=(0.0, 0.0, 0.0), rotation_z_deg: float = 0.0,
                        lateral_offset: float = 0.0, cant_deg: float = 0.0,
                        cap_ends: bool = True, scene=None):
-    """Create a rail mesh object and link it to ``collection`` (default: the
-    active collection). ``location`` is in Blender units. Returns the object.
-    Generation parameters are stored on the object (see ``get_rail_params``)."""
+    """Create a rail mesh object and return it.
+
+    The object is linked to ``collection`` (default: the active collection).
+    ``location`` is in Blender units. Generation parameters are stored on the
+    object (see ``get_rail_params``) so it can be rebuilt later.
+    """
     import bpy
     prof = resolve_profile(profile)
     md = generate_rail_mesh(prof, path, lateral_offset, cant_deg, cap_ends)
@@ -292,8 +308,11 @@ def _curve_points_mm(curve_obj, scene=None):
 def create_rail_along_curve(curve_obj, profile, name: str | None = None, collection=None,
                             lateral_offset: float = 0.0, cant_deg: float = 0.0,
                             cap_ends: bool = True, scene=None):
-    """Sweep a rail along a Blender curve object (first spline, world space).
-    Raise the curve's resolution for smoother rail."""
+    """Sweep a rail along a Blender curve object and return the new object.
+
+    Uses the curve's first spline in world space. Raise the curve's
+    resolution for smoother rail.
+    """
     import bpy
     pts, closed = _curve_points_mm(curve_obj, scene)
     spec = {"kind": "POLYLINE", "points": [list(p) for p in pts], "closed": closed}
@@ -307,6 +326,7 @@ def create_rail_along_curve(curve_obj, profile, name: str | None = None, collect
 
 
 def is_rail_object(obj) -> bool:
+    """True if ``obj`` was made by this add-on (it carries rail parameters)."""
     return obj is not None and RAIL_PROP_KEY in obj.keys()
 
 
@@ -319,8 +339,10 @@ def get_rail_params(obj) -> dict:
 
 def rebuild_rail_object(obj, profile=None, path=None, lateral_offset=None,
                         cant_deg=None, cap_ends=None, scene=None):
-    """Regenerate an existing rail object's mesh, changing any parameter
-    given. Keeps the object, its transform, modifiers and materials."""
+    """Regenerate a rail object's mesh, changing only the parameters given.
+
+    Keeps the object, its transform, modifiers and materials.
+    """
     import bpy
     p = get_rail_params(obj)
     prof = resolve_profile(profile if profile is not None else p["profile"])
@@ -363,6 +385,7 @@ def object_to_mesh_data(obj, apply_transform: bool = True, scene=None) -> MeshDa
 
 
 def _merge(meshes) -> MeshData:
+    """Combine several MeshData into one, renumbering the face indices."""
     out = MeshData()
     for md in meshes:
         base = len(out.vertices)

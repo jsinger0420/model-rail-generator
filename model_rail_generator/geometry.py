@@ -19,6 +19,7 @@ Vec3 = tuple[float, float, float]
 # =================================================================== paths
 @dataclass
 class PathPoint:
+    """One point on a sweep path: position (mm), horizontal direction of travel and corner miter."""
     position: Vec3
     tangent: tuple[float, float]   # horizontal unit direction of travel (x, y)
     miter: float = 1.0             # lateral stretch at polyline corners
@@ -26,10 +27,12 @@ class PathPoint:
 
 @dataclass
 class RailPath:
+    """Ordered points the rail profile is swept along; ``closed`` joins the last point to the first."""
     points: list[PathPoint]
     closed: bool = False
 
     def length(self) -> float:
+        """Total length of the path in millimetres."""
         pts = [p.position for p in self.points]
         if self.closed:
             pts = pts + [pts[0]]
@@ -101,6 +104,7 @@ def polyline_path(points, closed: bool = False) -> RailPath:
         raise ValueError("a path needs at least two distinct points")
 
     def seg_dir(a, b):
+        """Horizontal unit direction from point ``a`` to point ``b``."""
         dx, dy = b[0] - a[0], b[1] - a[1]
         L = math.hypot(dx, dy)
         return (dx / L, dy / L)
@@ -131,12 +135,16 @@ def polyline_path(points, closed: bool = False) -> RailPath:
 # ==================================================================== mesh
 @dataclass
 class MeshData:
-    """Simple indexed mesh, millimetres.  Faces are tris and quads with
-    outward-facing (counter-clockwise) winding; the solid is closed."""
+    """Simple indexed mesh in millimetres.
+
+    Faces are tris and quads with outward-facing (counter-clockwise) winding,
+    and the solid is closed.
+    """
     vertices: list[Vec3] = field(default_factory=list)
     faces: list[tuple[int, ...]] = field(default_factory=list)
 
     def triangles(self) -> list[tuple[int, int, int]]:
+        """Faces split into triangles (quads become two triangles)."""
         tris = []
         for f in self.faces:
             for i in range(1, len(f) - 1):
@@ -153,6 +161,7 @@ class MeshData:
         return s / 6.0
 
     def bounds(self) -> tuple[Vec3, Vec3]:
+        """Bounding box as ((min x, y, z), (max x, y, z)) in millimetres."""
         xs, ys, zs = zip(*self.vertices)
         return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs))
 
@@ -166,6 +175,7 @@ class MeshData:
         return all(c == 1 and edges.get((b, a)) == 1 for (a, b), c in edges.items())
 
     def transformed(self, scale: float = 1.0, offset: Vec3 = (0.0, 0.0, 0.0)) -> "MeshData":
+        """Copy of the mesh scaled by ``scale`` and then moved by ``offset``."""
         ox, oy, oz = offset
         return MeshData([(x * scale + ox, y * scale + oy, z * scale + oz) for x, y, z in self.vertices],
                         list(self.faces))
@@ -222,17 +232,21 @@ def build_rail(profile: RailProfile, path: RailPath, lateral_offset: float = 0.0
 
 # ========================================================== triangulation
 def triangulate_polygon(pts) -> list[tuple[int, int, int]]:
-    """Ear-clipping triangulation of a simple polygon.  Returns CCW index
-    triples into ``pts`` (2D points)."""
+    """Triangulate a simple 2D polygon by ear clipping.
+
+    Returns counter-clockwise index triples into ``pts``.
+    """
     n = len(pts)
     idx = list(range(n))
     if polygon_area(pts) < 0:
         idx.reverse()
 
     def cross(o, a, b):
+        """Z of the cross product of o->a and o->b (positive when a-b turns left)."""
         return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
 
     def inside(p, a, b, c):
+        """True if point ``p`` lies inside or on triangle a-b-c."""
         return cross(a, b, p) >= -1e-12 and cross(b, c, p) >= -1e-12 and cross(c, a, p) >= -1e-12
 
     tris = []

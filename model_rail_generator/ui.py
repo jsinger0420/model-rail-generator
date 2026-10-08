@@ -25,6 +25,7 @@ _preset_items_cache: list = []   # Blender requires dynamic enum items to stay r
 
 
 def _preset_items(self, context):
+    """Items for the Preset menu: built-ins, then user presets marked (user)."""
     global _preset_items_cache
     items = []
     for i, n in enumerate(api.list_presets()):
@@ -36,6 +37,7 @@ def _preset_items(self, context):
 
 
 def _on_preset(self, context):
+    """Load the chosen preset's dimensions into the panel."""
     try:
         p = api.get_preset(self.preset)
     except KeyError:
@@ -44,6 +46,7 @@ def _on_preset(self, context):
 
 
 def _on_units(self, context):
+    """Convert length, radius and offset when the units switch between mm and inches."""
     f = (1 / INCH) if self.path_units == "INCH" else INCH
     if self.path_units == self.get("_last_units", "MM"):
         return
@@ -54,6 +57,7 @@ def _on_units(self, context):
 
 
 def _poll_curve(self, obj):
+    """Only curve objects can be picked for Along Curve."""
     return obj.type == "CURVE"
 
 
@@ -62,12 +66,14 @@ _DEFAULT_PRESET_INDEX = api.list_builtin_presets().index(_DEF.name)
 
 
 def _dim(name, desc, default):
+    """A millimetre dimension property for the profile, with a consistent tooltip."""
     return FloatProperty(name=name, description=desc + " (mm, actual model size)",
                          default=default, min=0.0, soft_max=50.0, precision=3, step=1)
 
 
 class MODELRAIL_PG_settings(PropertyGroup):
     # ---------------------------------------------------------- profile
+    """Everything in the Rail panel, stored on the scene as ``scene.model_rail``."""
     preset: EnumProperty(name="Preset", items=_preset_items, update=_on_preset,
                          default=_DEFAULT_PRESET_INDEX)
     preset_name: StringProperty(name="Name", default="Code 100",
@@ -124,6 +130,7 @@ class MODELRAIL_PG_settings(PropertyGroup):
 
     # ---------------------------------------------------------- helpers
     def load_profile(self, p: RailProfile):
+        """Fill the panel's dimensions, name and notes from ``p``."""
         for f in PROFILE_FIELDS:
             setattr(self, f, getattr(p, f))
         self.corner_segments = p.corner_segments
@@ -132,15 +139,18 @@ class MODELRAIL_PG_settings(PropertyGroup):
         self.code_input = round(p.code)
 
     def to_profile(self) -> RailProfile:
+        """The panel's current dimensions as a RailProfile."""
         kw = {f: getattr(self, f) for f in PROFILE_FIELDS}
         return RailProfile(name=self.preset_name.strip() or "Custom",
                            corner_segments=self.corner_segments,
                            description=self.description, **kw)
 
     def to_mm(self, v: float) -> float:
+        """Convert a length typed in the panel's units to millimetres."""
         return v * INCH if self.path_units == "INCH" else v
 
     def path_spec(self) -> dict:
+        """The Straight or Curved shape as an API path spec in millimetres."""
         if self.path_mode == "ARC":
             return {"kind": "ARC", "radius": self.to_mm(self.radius), "angle": self.angle,
                     "direction": self.direction, "max_segment_angle": self.max_segment_angle}
@@ -148,10 +158,12 @@ class MODELRAIL_PG_settings(PropertyGroup):
 
 
 def _settings(context) -> MODELRAIL_PG_settings:
+    """The scene's Rail panel settings."""
     return context.scene.model_rail
 
 
 def _check_profile(op, s):
+    """The panel's profile, or None after reporting why it's invalid."""
     p = s.to_profile()
     errs = p.validate()
     if errs:
@@ -170,6 +182,7 @@ def is_busy() -> bool:
 
 
 def _redraw(context):
+    """Ask every area of the screen to redraw so the wait message shows."""
     screen = context.screen
     if screen:
         for area in screen.areas:
@@ -186,6 +199,7 @@ class MODELRAIL_OT_generate(Operator):
     _timer = None
 
     def _run(self, context):
+        """Build the rail and select it; reports and records the result or error."""
         s = _settings(context)
         p = _check_profile(self, s)
         if p is None:
@@ -219,6 +233,7 @@ class MODELRAIL_OT_generate(Operator):
 
     def execute(self, context):
         # Scripts and the redo panel: build straight away.
+        """Build straight away (used by scripts and the redo panel)."""
         return self._run(context)
 
     def invoke(self, context, event):
@@ -241,6 +256,7 @@ class MODELRAIL_OT_generate(Operator):
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
+        """Ignore input until the timer fires, then build and restore the cursor."""
         global _busy
         if event.type != 'TIMER':
             return {'RUNNING_MODAL'}  # ignore clicks and keys until the build is done
@@ -256,16 +272,19 @@ class MODELRAIL_OT_generate(Operator):
 
 
 class MODELRAIL_OT_rebuild(Operator):
+    """Regenerate the selected rails with the current profile and shape settings"""
+
     bl_idname = "model_rail.rebuild"
     bl_label = "Update Selected Rails"
-    bl_description = "Regenerate selected rail objects with the current profile and shape settings"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
+        """Available only when at least one selected object is a rail."""
         return any(api.is_rail_object(o) for o in context.selected_objects)
 
     def execute(self, context):
+        """Rebuild each selected rail; curve-following rails keep their curve path."""
         s = _settings(context)
         p = _check_profile(self, s)
         if p is None:
@@ -287,31 +306,36 @@ class MODELRAIL_OT_rebuild(Operator):
 
 
 class MODELRAIL_OT_from_code(Operator):
+    """Fill every dimension with typical proportions for the entered rail code"""
+
     bl_idname = "model_rail.from_code"
     bl_label = "Fill From Code"
-    bl_description = "Fill all dimensions with typical proportions for the entered rail code"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
+        """Replace the dimensions with typical ones for the code entered."""
         s = _settings(context)
         s.load_profile(profile_from_code(s.code_input, description="Custom"))
         return {'FINISHED'}
 
 
 class MODELRAIL_OT_save_preset(Operator):
+    """Save the current dimensions as a preset of your own, under the name above"""
+
     bl_idname = "model_rail.save_preset"
     bl_label = "Save Preset"
-    bl_description = "Save the current dimensions as a user preset"
 
     overwrite: BoolProperty(default=False, options={'HIDDEN', 'SKIP_SAVE'})
 
     def invoke(self, context, event):
+        """Ask before overwriting an existing user preset of the same name."""
         name = _settings(context).preset_name.strip()
         if name in api.list_user_presets():
             return context.window_manager.invoke_confirm(self, event)
         return self.execute(context)
 
     def execute(self, context):
+        """Save the preset and select it in the Preset menu."""
         s = _settings(context)
         p = _check_profile(self, s)
         if p is None:
@@ -330,18 +354,22 @@ class MODELRAIL_OT_save_preset(Operator):
 
 
 class MODELRAIL_OT_delete_preset(Operator):
+    """Delete the selected preset (only your own presets can be deleted)"""
+
     bl_idname = "model_rail.delete_preset"
     bl_label = "Delete Preset"
-    bl_description = "Delete the selected user preset"
 
     @classmethod
     def poll(cls, context):
+        """Available only for user presets."""
         return not api.is_builtin_preset(_settings(context).preset)
 
     def invoke(self, context, event):
+        """Ask for confirmation before deleting."""
         return context.window_manager.invoke_confirm(self, event)
 
     def execute(self, context):
+        """Delete the preset and switch to the first built-in."""
         s = _settings(context)
         name = s.preset
         try:
@@ -355,10 +383,10 @@ class MODELRAIL_OT_delete_preset(Operator):
 
 
 class MODELRAIL_OT_export(Operator):
+    """Export the selected objects (or, with none selected, a rail from these settings) as STL/OBJ in mm"""
+
     bl_idname = "model_rail.export"
     bl_label = "Export Rail"
-    bl_description = ("Export selected objects (or, if none are selected, a rail built from the "
-                      "current settings) to STL/OBJ in millimetres")
 
     filepath: StringProperty(subtype='FILE_PATH')
     filter_glob: StringProperty(default="*.stl;*.obj", options={'HIDDEN'})
@@ -368,6 +396,7 @@ class MODELRAIL_OT_export(Operator):
                                 description="Export selected meshes; otherwise build from settings")
 
     def invoke(self, context, event):
+        """Open the file browser with a file name based on the preset."""
         s = _settings(context)
         self.format = s.export_format
         base = bpy.path.clean_name(s.preset_name or "rail")
@@ -376,6 +405,7 @@ class MODELRAIL_OT_export(Operator):
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
+        """Write the file and show where it went."""
         s = _settings(context)
         ext = ".obj" if self.format == "OBJ" else ".stl"
         path = bpy.path.ensure_ext(bpy.path.abspath(self.filepath), ext)
@@ -406,6 +436,7 @@ class MODELRAIL_OT_export(Operator):
 
 # =================================================================== panels
 class _Panel:
+    """Settings shared by all Rail panels: 3D Viewport sidebar, Rail tab."""
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Rail"
@@ -418,6 +449,7 @@ class MODELRAIL_PT_main(_Panel, Panel):
     bl_idname = "MODELRAIL_PT_main"
 
     def draw(self, context):
+        """Draw Generate (or the wait message), Update, Export, the last result and a summary."""
         s = _settings(context)
         col = self.layout.column()
         p = s.to_profile()
@@ -461,10 +493,12 @@ class MODELRAIL_PT_main(_Panel, Panel):
 
 
 class MODELRAIL_PT_profile(_Panel, Panel):
+    """Sub-panel for choosing, editing and saving the rail profile."""
     bl_label = "Rail Profile"
     bl_parent_id = "MODELRAIL_PT_main"
 
     def draw(self, context):
+        """Draw the preset menu, the dimensions, Fill From Code and Save Preset."""
         s = _settings(context)
         col = self.layout.column()
         row = col.row(align=True)
@@ -490,10 +524,12 @@ class MODELRAIL_PT_profile(_Panel, Panel):
 
 
 class MODELRAIL_PT_shape(_Panel, Panel):
+    """Sub-panel for the rail's shape: straight, curved or along a curve."""
     bl_label = "Shape"
     bl_parent_id = "MODELRAIL_PT_main"
 
     def draw(self, context):
+        """Draw the shape settings for the chosen mode, plus offset, cant and caps."""
         s = _settings(context)
         box = self.layout.column()
         box.row().prop(s, "path_mode", expand=True)
@@ -533,12 +569,14 @@ classes = (
 
 
 def register():
+    """Register the panel classes and add ``scene.model_rail``."""
     for c in classes:
         bpy.utils.register_class(c)
     bpy.types.Scene.model_rail = PointerProperty(type=MODELRAIL_PG_settings)
 
 
 def unregister():
+    """Remove ``scene.model_rail`` and unregister the panel classes."""
     del bpy.types.Scene.model_rail
     for c in reversed(classes):
         bpy.utils.unregister_class(c)

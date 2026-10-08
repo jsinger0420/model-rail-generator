@@ -94,13 +94,17 @@ class RailProfile:
         return e
 
     def is_valid(self) -> bool:
+        """True if ``validate`` finds no problems."""
         return not self.validate()
 
     # -------------------------------------------------------------- geometry
     def outline(self, cant_deg: float = 0.0) -> list[tuple[float, float]]:
-        """Closed outline as (x, z) points, counter-clockwise, no repeat of
-        the first point.  ``cant_deg`` tilts the rail about the centre of its
-        base (positive tilts the head toward +x)."""
+        """Closed outline as counter-clockwise (x, z) points.
+
+        The first point is not repeated at the end. ``cant_deg`` tilts the
+        rail about the centre of its base (positive tilts the head toward +x).
+        Raises ValueError if the profile is invalid.
+        """
         errs = self.validate()
         if errs:
             raise ValueError(f"Invalid rail profile '{self.name}': " + "; ".join(errs))
@@ -144,12 +148,14 @@ class RailProfile:
 
     # ------------------------------------------------------- serialisation
     def to_dict(self) -> dict:
+        """Profile as a JSON-safe dict, with the derived ``code`` included for readers."""
         d = asdict(self)
         d["code"] = self.code
         return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "RailProfile":
+        """Build a profile from a dict, ignoring unknown keys such as ``code``."""
         names = {f.name for f in fields(cls)}
         kw = {k: v for k, v in d.items() if k in names}
         if "corner_segments" in kw:
@@ -160,6 +166,7 @@ class RailProfile:
         return cls(**kw)
 
     def copy(self, **changes) -> "RailProfile":
+        """Copy of this profile with any fields in ``changes`` replaced."""
         return replace(self, **changes)
 
 
@@ -176,6 +183,7 @@ def polygon_area(pts) -> float:
 
 
 def _dedupe(pts, eps=1e-9):
+    """Drop consecutive duplicate points, including a last point equal to the first."""
     out = []
     for p in pts:
         if not out or abs(p[0] - out[-1][0]) > eps or abs(p[1] - out[-1][1]) > eps:

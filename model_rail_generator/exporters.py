@@ -1,6 +1,8 @@
-"""STL / OBJ writers.  Pure Python (no bpy) so output is identical across
-Blender versions and the API works headless.  Units are millimetres, which is
-what slicers expect."""
+"""STL and OBJ writers in millimetres, the units slicers expect.
+
+Pure Python (no bpy), so output is identical across Blender versions and the
+API works headless.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ FORMATS = ("STL", "STL_ASCII", "OBJ")
 
 
 def _normal(a, b, c):
+    """Unit normal of triangle a-b-c (counter-clockwise winding faces outward)."""
     ux, uy, uz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
     vx, vy, vz = c[0] - a[0], c[1] - a[1], c[2] - a[2]
     nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
@@ -22,6 +25,7 @@ def _normal(a, b, c):
 
 
 def write_stl(path: str, mesh: MeshData, binary: bool = True, name: str = "rail") -> str:
+    """Write ``mesh`` as a binary or ASCII STL in millimetres and return the path."""
     v = mesh.vertices
     tris = mesh.triangles()
     if binary:
@@ -47,6 +51,7 @@ def write_stl(path: str, mesh: MeshData, binary: bool = True, name: str = "rail"
 
 
 def write_obj(path: str, mesh: MeshData, name: str = "rail") -> str:
+    """Write ``mesh`` as a Wavefront OBJ in millimetres and return the path."""
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("# Model Rail Generator - units: millimetres\n")
         fh.write(f"o {name}\n")
@@ -58,8 +63,11 @@ def write_obj(path: str, mesh: MeshData, name: str = "rail") -> str:
 
 
 def export_mesh(path: str, mesh: MeshData, fmt: str | None = None, name: str = "rail") -> str:
-    """Write ``mesh`` (mm).  ``fmt`` is one of FORMATS; if omitted it is
-    inferred from the file extension (.stl -> binary STL, .obj -> OBJ)."""
+    """Write ``mesh`` (mm) to ``path`` and return the path.
+
+    ``fmt`` is one of FORMATS; if omitted it is inferred from the file
+    extension (.stl -> binary STL, .obj -> OBJ).
+    """
     if fmt is None:
         ext = os.path.splitext(path)[1].lower()
         fmt = {".stl": "STL", ".obj": "OBJ"}.get(ext)

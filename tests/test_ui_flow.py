@@ -1,5 +1,9 @@
-"""Simulates clicking Generate (modal wait-cursor path) and draws the panels
-with a recording layout. Run: python tests/test_ui_flow.py  (needs bpy)."""
+"""Simulate clicking Generate and drawing the panels, without a Blender window.
+
+Checks the wait cursor, status message, ignored input and button order using
+stand-ins for the window, workspace and layout.
+Run: python tests/test_ui_flow.py  (needs pip install bpy).
+"""
 import os, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ["MODEL_RAIL_PRESETS"] = os.path.join(tempfile.mkdtemp(), "p.json")
@@ -8,43 +12,102 @@ import model_rail_generator as addon
 addon.register()
 from model_rail_generator import ui
 
-log = []
+log = []  # every recorded call, in order
+
 
 class Rec:
-    """Records layout calls; every method returns another recorder."""
-    def __init__(self, name="layout"): self.__dict__["_n"] = name
+    """Stand-in for a Blender UI layout that records every call made on it."""
+
+    def __init__(self, name="layout"):
+        """Name the recorder after the call that created it."""
+        self.__dict__["_n"] = name
+
     def __getattr__(self, a):
+        """Return a function that logs the call and returns a child recorder."""
         def f(*args, **kw):
-            log.append((a, args, kw)); return Rec(a)
+            """Log one layout call (row, label, operator, prop...)."""
+            log.append((a, args, kw))
+            return Rec(a)
         return f
-    def __setattr__(self, a, v): log.append(("set", a, v))
+
+    def __setattr__(self, a, v):
+        """Log attribute settings such as ``row.enabled = False``."""
+        log.append(("set", a, v))
+
 
 class Win:
-    def cursor_modal_set(self, c): log.append(("cursor", c))
-    def cursor_modal_restore(self): log.append(("cursor", "restore"))
+    """Stand-in for the window, recording cursor changes."""
+
+    def cursor_modal_set(self, c):
+        """Record the cursor being set (e.g. WAIT)."""
+        log.append(("cursor", c))
+
+    def cursor_modal_restore(self):
+        """Record the cursor being restored."""
+        log.append(("cursor", "restore"))
+
+
 class WS:
-    def status_text_set(self, t): log.append(("status", t))
+    """Stand-in for the workspace, recording status-bar text."""
+
+    def status_text_set(self, t):
+        """Record the status-bar message (None clears it)."""
+        log.append(("status", t))
+
+
 class WM:
-    def event_timer_add(self, t, window=None): log.append(("timer_add",)); return "T"
-    def event_timer_remove(self, t): log.append(("timer_remove",))
-    def modal_handler_add(self, op): log.append(("modal_add",))
+    """Stand-in for the window manager, recording timers and modal handlers."""
+
+    def event_timer_add(self, t, window=None):
+        """Record a timer being added and return a dummy handle."""
+        log.append(("timer_add",))
+        return "T"
+
+    def event_timer_remove(self, t):
+        """Record the timer being removed."""
+        log.append(("timer_remove",))
+
+    def modal_handler_add(self, op):
+        """Record the operator becoming modal."""
+        log.append(("modal_add",))
+
 
 class Ctx:
+    """Context with fake window parts; everything else comes from bpy.context."""
+
     window, workspace, window_manager, screen = Win(), WS(), WM(), None
-    def __getattr__(self, a): return getattr(bpy.context, a)
+
+    def __getattr__(self, a):
+        """Fall back to the real context for scene, objects, view layer, etc."""
+        return getattr(bpy.context, a)
+
 
 class Ev:
-    def __init__(self, t): self.type = t
+    """Minimal event with just a type, e.g. TIMER or LEFTMOUSE."""
+
+    def __init__(self, t):
+        """Store the event type."""
+        self.type = t
+
 
 class FakeOp:
+    """Stand-in for the Generate operator instance, borrowing its real _run."""
+
     _timer = None
-    def report(self, lvl, msg): log.append(("report", msg))
     _run = ui.MODELRAIL_OT_generate._run
 
+    def report(self, lvl, msg):
+        """Record messages the operator would show in Blender's info bar."""
+        log.append(("report", msg))
+
+
 def draw(panel):
-    log.clear(); obj = type("P", (), {"layout": Rec()})()
+    """Draw ``panel`` into a recorder and return its operator, label and prop calls."""
+    log.clear()
+    obj = type("P", (), {"layout": Rec()})()
     panel.draw(obj, bpy.context)
     return [(a, args, kw) for a, args, kw in log if a in ("operator", "label", "prop")]
+
 
 ctx, op = Ctx(), FakeOp()
 n_before = len(bpy.data.objects)

@@ -11,6 +11,7 @@ PKG = "model_rail_generator"
 
 
 def main():
+    """Zip the add-on package into dist/ and print the path of the zip."""
     with open(os.path.join(ROOT, PKG, "blender_manifest.toml"), encoding="utf-8") as fh:
         version = re.search(r'^version\s*=\s*"([^"]+)"', fh.read(), re.M).group(1)
     os.makedirs(os.path.join(ROOT, "dist"), exist_ok=True)

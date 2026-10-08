@@ -157,7 +157,8 @@ RAIL/
 ├── tests/
 │   ├── test_core.py        geometry, presets, export — plain Python, no Blender needed
 │   ├── test_blender.py     UI operators + API inside Blender
-│   └── test_ui_flow.py     Generate click flow (wait cursor) and panel layout
+│   ├── test_ui_flow.py     Generate click flow (wait cursor) and panel layout
+│   └── test_docstrings.py  every module, class and function has a docstring
 ├── build.py                makes dist/model_rail_generator-<version>.zip
 ├── dist/                   installable add-on zip(s)
 └── README.md
@@ -167,6 +168,7 @@ Run the tests from the repository folder:
 
 ```
 python tests/test_core.py
+python tests/test_docstrings.py
 python tests/test_ui_flow.py      (needs pip install bpy)
 "C:\Program Files\Blender Foundation\Blender 4.2\blender.exe" -b --factory-startup --python tests/test_blender.py
 ```
@@ -181,6 +183,8 @@ mklink /J "%APPDATA%\Blender Foundation\Blender\4.2\scripts\addons\model_rail_ge
 ```
 
 Then enable it under Add-ons and use *Reload Scripts* (F3 > Reload Scripts) after edits.
+Every module, class and function needs a docstring with a one-line summary;
+`tests/test_docstrings.py` fails if one is missing. Operator docstrings are their tooltips.
 When releasing, bump the version in both `blender_manifest.toml` and `bl_info` in
 `__init__.py`, and bump `API_VERSION` in `api.py` if the public API changed.
 

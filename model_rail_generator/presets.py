@@ -18,6 +18,7 @@ PRESET_FILE_VERSION = 1
 
 
 def _builtin() -> dict[str, RailProfile]:
+    """Build the built-in code presets, ordered largest rail first."""
     specs = [
         (332, "G scale (LGB / Aristo / USA Trains brass & steel)"),
         (250, "G / Fn3 fine-scale, 1:32 / 1:29"),
@@ -44,6 +45,7 @@ BUILTIN_PRESETS: dict[str, RailProfile] = _builtin()
 
 
 class PresetError(Exception):
+    """Raised when a preset can't be saved, deleted or loaded (the message says why)."""
     pass
 
 
@@ -54,24 +56,30 @@ class PresetLibrary:
     """
 
     def __init__(self, user_file: str | None = None):
+        """Load built-ins plus user presets from ``user_file`` (None keeps them in memory only)."""
         self.user_file = user_file
         self._user: dict[str, RailProfile] = {}
         self.reload()
 
     # ----------------------------------------------------------- queries
     def names(self) -> list[str]:
+        """All preset names: built-ins first, then user presets alphabetically."""
         return list(BUILTIN_PRESETS) + sorted(self._user)
 
     def builtin_names(self) -> list[str]:
+        """Names of the built-in presets."""
         return list(BUILTIN_PRESETS)
 
     def user_names(self) -> list[str]:
+        """Names of the user presets, sorted."""
         return sorted(self._user)
 
     def is_builtin(self, name: str) -> bool:
+        """True if ``name`` is a built-in preset."""
         return name in BUILTIN_PRESETS
 
     def exists(self, name: str) -> bool:
+        """True if a built-in or user preset is called ``name``."""
         return name in BUILTIN_PRESETS or name in self._user
 
     def get(self, name: str) -> RailProfile:
@@ -83,10 +91,12 @@ class PresetLibrary:
         raise KeyError(f"No rail preset named '{name}'")
 
     def all(self) -> dict[str, RailProfile]:
+        """Every preset as a name -> RailProfile dict (copies)."""
         return {n: self.get(n) for n in self.names()}
 
     # ---------------------------------------------------------- mutation
     def save(self, profile: RailProfile, overwrite: bool = True) -> None:
+        """Validate ``profile`` and save it as a user preset under its name."""
         name = (profile.name or "").strip()
         if not name:
             raise PresetError("Preset name cannot be empty")
@@ -101,6 +111,7 @@ class PresetLibrary:
         self._write()
 
     def delete(self, name: str) -> None:
+        """Delete the user preset ``name`` (built-ins can't be deleted)."""
         if name in BUILTIN_PRESETS:
             raise PresetError("Built-in presets cannot be deleted")
         if name not in self._user:
@@ -110,6 +121,7 @@ class PresetLibrary:
 
     # ------------------------------------------------------------- file io
     def reload(self) -> None:
+        """Re-read user presets from disk, skipping any bad entries."""
         self._user = {}
         if not self.user_file or not os.path.isfile(self.user_file):
             return
@@ -150,6 +162,7 @@ class PresetLibrary:
         return done
 
     def _write(self) -> None:
+        """Save user presets to the JSON file atomically, so a crash can't corrupt it."""
         if not self.user_file:
             return
         os.makedirs(os.path.dirname(self.user_file) or ".", exist_ok=True)

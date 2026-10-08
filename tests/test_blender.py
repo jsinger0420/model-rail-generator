@@ -1,3 +1,8 @@
+"""Exercise the add-on inside Blender: operators, presets, curve rails, export and units.
+
+Run: python tests/test_blender.py (with pip install bpy) or blender -b --python tests/test_blender.py.
+"""
+
 import os, sys, tempfile, math
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ["MODEL_RAIL_PRESETS"] = os.path.join(tempfile.mkdtemp(), "p.json")

@@ -11,7 +11,7 @@ Other add-ons: use the public API in ``api`` (also importable as
 bl_info = {
     "name": "Model Rail Generator",
     "author": "John (singerlinks.com)",
-    "version": (1, 1, 0),
+    "version": (1, 1, 1),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > Rail",
     "description": "Generate and export straight or curved model railroad rail (code 40-332)",
@@ -37,11 +37,13 @@ API_ALIAS = "model_rail_api"
 
 
 def register():
+    """Register the panel, operators and settings, and publish the API as ``model_rail_api``."""
     ui.register()
     sys.modules[API_ALIAS] = api
 
 
 def unregister():
+    """Remove the ``model_rail_api`` alias and unregister everything ``register`` added."""
     if sys.modules.get(API_ALIAS) is api:
         del sys.modules[API_ALIAS]
     ui.unregister()
